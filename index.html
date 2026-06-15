@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sex3Bet — play-money casino</title>
+<script>
+/* ───────────────────────────────────────────────────────────────────────────
+   Asset loader + cache-buster.
+   Bump APP_VERSION whenever you change styles.css, store.js, or app.js so
+   browsers fetch the new file instead of a stale cached one.
+   (Heavy local dev? Set APP_VERSION = String(Date.now()) to always fetch fresh.)
+   ─────────────────────────────────────────────────────────────────────────── */
+(function () {
+  var APP_VERSION = "7";
+  var q = "?v=" + APP_VERSION;
+
+  // stylesheet immediately (no flash of unstyled content)
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "styles.css" + q;
+  document.head.appendChild(link);
+
+  // scripts in strict order, after the DOM is ready
+  var chain = [
+    "https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js",
+    "store.js" + q,
+    "app.js" + q
+  ];
+  function loadNext(i) {
+    if (i >= chain.length) return;
+    var s = document.createElement("script");
+    s.src = chain[i];
+    s.onload = function () { loadNext(i + 1); };
+    s.onerror = function () { loadNext(i + 1); }; // e.g. Firebase blocked -> fall through to local mode
+    document.head.appendChild(s);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { loadNext(0); });
+  else loadNext(0);
+})();
+</script>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <nav class="side">
+    <div class="logo">Sex<span class="x">3</span>Bet</div>
+    <div class="navlbl">Games</div>
+    <div class="nav" id="nav">
+      <button class="navitem on" data-game="blackjack"><span class="ico">♠</span> Blackjack</button>
+      <button class="navitem" data-game="roulette"><span class="ico">◉</span> Roulette</button>
+      <button class="navitem" data-game="plinko"><span class="ico">⁘</span> Plinko</button>
+      <button class="navitem" data-game="mines"><span class="ico">✦</span> Mines</button>
+      <button class="navitem" data-game="wheel"><span class="ico">◎</span> Wheel</button>
+      <button class="navitem" data-game="rps"><span class="ico">✊</span> RPS</button>
+      <button class="navitem" data-game="crash"><span class="ico">📈</span> Crash</button>
+      <button class="navitem" data-game="gummy"><span class="ico">🐻</span> Gummy Cross</button>
+    </div>
+    <div class="navlbl">Server</div>
+    <div class="nav">
+      <button class="navitem" data-game="leaderboard"><span class="ico">🏆</span> Leaderboard</button>
+      <button class="navitem" data-game="admin"><span class="ico">🔑</span> Owner</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="stats">
+        <span>Wagered <b id="stWager">0</b></span>
+        <span>Biggest win <b id="stBig">0</b></span>
+      </div>
+      <div class="wallet">
+        <button class="name-pill" id="namePill">Set name</button>
+        <div class="balance"><span class="coin"></span><span class="amt" id="balAmt">0</span></div>
+        <button class="chip-btn" id="faucetBtn">+ Chips</button>
+        <button class="menu-btn" id="resetBtn" title="Reset bankroll">↺</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <!-- BLACKJACK -->
+      <section class="game on" id="g-blackjack">
+        <div class="game-head"><h2>Blackjack</h2><span class="sub">Beat the dealer to 21 · blackjack pays 3:2</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld">
+              <label>Bet amount</label>
+              <div class="amt-row">
+                <input type="number" id="bjBet" value="50" min="1" step="1">
+                <button data-amt="bjBet" data-op="half">½</button>
+                <button data-amt="bjBet" data-op="double">2×</button>
+                <button data-amt="bjBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <button class="primary" id="bjDeal">Deal</button>
+            <div class="bj-actions" id="bjActions" style="display:none">
+              <button class="secondary" id="bjHit">Hit</button>
+              <button class="secondary" id="bjStand">Stand</button>
+              <button class="secondary" id="bjDouble">Double</button>
+            </div>
+          </div>
+          <div class="board">
+            <div class="felt">
+              <div class="hand-area">
+                <div class="hand-label">Dealer <span class="val" id="bjDealerVal">—</span></div>
+                <div class="cards" id="bjDealer"></div>
+              </div>
+              <div class="hand-area">
+                <div class="hand-label">You <span class="val" id="bjPlayerVal">—</span></div>
+                <div class="cards" id="bjPlayer"></div>
+              </div>
+            </div>
+            <div class="msg" id="bjMsg">Place a bet and deal in.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ROULETTE -->
+      <section class="game" id="g-roulette">
+        <div class="game-head"><h2>Roulette</h2><span class="sub">European single-zero · straight up pays 35:1</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld">
+              <label>Chip size</label>
+              <div class="amt-row">
+                <input type="number" id="rChip" value="25" min="1" step="1">
+                <button data-amt="rChip" data-op="half">½</button>
+                <button data-amt="rChip" data-op="double">2×</button>
+              </div>
+            </div>
+            <div class="fld"><label>On the table</label>
+              <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="rTotal">0</div>
+            </div>
+            <button class="primary" id="rSpin" disabled>Spin</button>
+            <button class="secondary" id="rClear" style="margin-top:8px">Clear bets</button>
+            <div class="msg" id="rMsg">Click the table to place chips.</div>
+          </div>
+          <div class="board">
+            <div class="roul-wrap">
+              <div class="wheel-box">
+                <div class="pointer"></div>
+                <canvas id="rouletteWheel" width="240" height="240"></canvas>
+              </div>
+              <div class="result-pill" id="rResult">—</div>
+              <div class="rtable" id="rTable"></div>
+              <div class="rbets" id="rOutside"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PLINKO -->
+      <section class="game" id="g-plinko">
+        <div class="game-head"><h2>Plinko</h2><span class="sub">Drop the ball · edges pay big, middle pays small</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld">
+              <label>Bet amount</label>
+              <div class="amt-row">
+                <input type="number" id="pBet" value="50" min="1" step="1">
+                <button data-amt="pBet" data-op="half">½</button>
+                <button data-amt="pBet" data-op="double">2×</button>
+                <button data-amt="pBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="fld"><label>Risk</label>
+              <div class="seg" id="pRisk">
+                <button data-risk="low" class="on">Low</button>
+                <button data-risk="med">Med</button>
+                <button data-risk="high">High</button>
+              </div>
+            </div>
+            <div class="fld"><label>Rows</label>
+              <div class="seg" id="pRows">
+                <button data-rows="8">8</button>
+                <button data-rows="12" class="on">12</button>
+                <button data-rows="16">16</button>
+              </div>
+            </div>
+            <button class="primary" id="pDrop">Drop ball</button>
+            <div class="msg" id="pMsg"></div>
+          </div>
+          <div class="board">
+            <canvas id="plinkoCanvas" width="560" height="520"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- MINES -->
+      <section class="game" id="g-mines">
+        <div class="game-head"><h2>Mines</h2><span class="sub">Reveal gems, dodge bombs · cash out anytime</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld">
+              <label>Bet amount</label>
+              <div class="amt-row">
+                <input type="number" id="mBet" value="50" min="1" step="1">
+                <button data-amt="mBet" data-op="half">½</button>
+                <button data-amt="mBet" data-op="double">2×</button>
+                <button data-amt="mBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="fld"><label>Mines</label>
+              <select id="mMines"></select>
+            </div>
+            <button class="primary" id="mStart">Start game</button>
+            <button class="primary" id="mCash" style="display:none;background:var(--gold);box-shadow:0 0 22px rgba(245,196,81,.4)">Cash out</button>
+            <div class="msg" id="mMsg"></div>
+          </div>
+          <div class="board">
+            <div class="mines-grid" id="mGrid"></div>
+            <div class="mines-info">
+              <div>Next tile<b id="mNext">—</b></div>
+              <div>Multiplier<b id="mMult">1.00×</b></div>
+              <div>Cash value<b id="mCashVal">—</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WHEEL -->
+      <section class="game" id="g-wheel">
+        <div class="game-head"><h2>Wheel</h2><span class="sub">Spin for a multiplier · 20× max payout</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld"><label>Bet amount</label>
+              <div class="amt-row"><input type="number" id="wsBet" value="50" min="1" step="1">
+                <button data-amt="wsBet" data-op="half">½</button><button data-amt="wsBet" data-op="double">2×</button><button data-amt="wsBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="fld"><label>Segment odds</label><div id="wsOdds" class="ws-odds"></div></div>
+            <button class="primary" id="wsSpin">Spin</button>
+            <div class="msg" id="wsMsg"></div>
+          </div>
+          <div class="board" style="display:flex;align-items:center;justify-content:center">
+            <div style="position:relative"><div class="ws-pointer"></div><canvas id="wsCanvas" width="320" height="320"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ROCK PAPER SCISSORS -->
+      <section class="game" id="g-rps">
+        <div class="game-head"><h2>Rock Paper Scissors</h2><span class="sub">Win pays 2× · tie returns your bet</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld"><label>Bet amount</label>
+              <div class="amt-row"><input type="number" id="rpsBet" value="50" min="1" step="1">
+                <button data-amt="rpsBet" data-op="half">½</button><button data-amt="rpsBet" data-op="double">2×</button><button data-amt="rpsBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="fld"><label>Your throw</label>
+              <div class="rps-choices">
+                <button class="rps-btn" data-rps="rock">🪨<span>Rock</span></button>
+                <button class="rps-btn" data-rps="paper">📄<span>Paper</span></button>
+                <button class="rps-btn" data-rps="scissors">✂️<span>Scissors</span></button>
+              </div>
+            </div>
+            <div class="msg" id="rpsMsg">Pick a throw to bet.</div>
+          </div>
+          <div class="board">
+            <div class="rps-arena">
+              <div class="rps-side"><div class="rps-lbl">You</div><div class="rps-icon" id="rpsYou">❓</div></div>
+              <div class="rps-vs">VS</div>
+              <div class="rps-side"><div class="rps-lbl">House</div><div class="rps-icon" id="rpsHouse">❓</div></div>
+            </div>
+            <div style="text-align:center;margin-top:24px">
+              <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Win streak</div>
+              <div class="rps-streak" id="rpsStreak">0</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CRASH -->
+      <section class="game" id="g-crash">
+        <div class="game-head"><h2>Crash</h2><span class="sub">Cash out before it crashes · the longer you wait the more you win</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld"><label>Bet amount</label>
+              <div class="amt-row"><input type="number" id="crBet" value="50" min="1" step="1">
+                <button data-amt="crBet" data-op="half">½</button><button data-amt="crBet" data-op="double">2×</button><button data-amt="crBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="fld"><label>Auto cash out at</label>
+              <div class="amt-row"><input type="number" id="crAuto" placeholder="e.g. 2.00" min="1.01" step="0.01" style="font-size:14px">
+                <button id="crAutoClear" style="font-size:11px;padding:0 10px">off</button>
+              </div>
+            </div>
+            <button class="primary" id="crBetBtn">Place bet</button>
+            <button class="primary" id="crCashBtn" style="display:none;background:var(--gold);color:#1a1000;box-shadow:0 0 22px rgba(245,196,81,.4)">Cash out</button>
+            <div class="msg" id="crMsg">Place a bet to join the next round.</div>
+          </div>
+          <div class="board" style="padding:0;overflow:hidden;position:relative">
+            <div class="crash-mult" id="crMult">1.00×</div>
+            <canvas id="crCanvas" width="580" height="300"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- GUMMY BEAR CROSS -->
+      <section class="game" id="g-gummy">
+        <div class="game-head"><h2>Gummy Cross</h2><span class="sub">Get the bear across 8 lanes · cash out anytime between lanes</span></div>
+        <div class="layout">
+          <div class="control">
+            <div class="fld"><label>Bet amount</label>
+              <div class="amt-row"><input type="number" id="gcBet" value="50" min="1" step="1">
+                <button data-amt="gcBet" data-op="half">½</button><button data-amt="gcBet" data-op="double">2×</button><button data-amt="gcBet" data-op="max">Max</button>
+              </div>
+            </div>
+            <div class="mines-info" id="gcInfo" style="display:none;margin-top:4px">
+              <div>Lane<b id="gcLane">0 / 8</b></div>
+              <div>Mult<b id="gcMult">1.00×</b></div>
+              <div>Value<b id="gcVal">—</b></div>
+            </div>
+            <button class="primary" id="gcStart">Start</button>
+            <button class="primary" id="gcCross" style="display:none">Run! 🐻</button>
+            <button class="primary" id="gcCash" style="display:none;background:var(--gold);color:#1a1000;box-shadow:0 0 22px rgba(245,196,81,.4)">Cash out 💰</button>
+            <div class="msg" id="gcMsg"></div>
+          </div>
+          <div class="board" style="padding:12px 10px;display:flex;align-items:center;justify-content:center">
+            <canvas id="gcCanvas" width="460" height="430"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- LEADERBOARD -->
+      <section class="game" id="g-leaderboard">
+        <div class="game-head"><h2>Server leaderboard</h2><span class="sub">Everyone who plays this board shows up here</span></div>
+        <div class="lb-bar">
+          <div class="seg lb-sort">
+            <button data-sort="biggest" class="on">Biggest win</button>
+            <button data-sort="net">Net profit</button>
+            <button data-sort="balance">Balance</button>
+          </div>
+          <button class="secondary" id="lbRefresh" style="width:auto;padding:11px 18px">↻ Refresh</button>
+        </div>
+        <div class="board"><div id="lbBody"></div></div>
+      </section>
+
+      <!-- ADMIN / OWNER -->
+      <section class="game" id="g-admin">
+        <div class="game-head"><h2>Owner controls</h2><span class="sub">Decide who can hand out chips</span></div>
+        <div class="board"><div id="adminBody"></div></div>
+      </section>
+    </div>
+
+    <div class="tag" id="memTag"></div>
+  </div>
+</div>
+
+<!-- faucet / reset modal -->
+<div class="ov" id="ov">
+  <div class="sheet">
+    <h3 id="ovTitle">Top up your chips</h3>
+    <p id="ovText">These are play chips — no real money, no payouts. Grab more whenever you want.</p>
+    <div class="row">
+      <button class="secondary" id="ovCancel">Cancel</button>
+      <button class="primary" id="ovOk">Add 1,000</button>
+    </div>
+  </div>
+</div>
+
+<!-- name modal -->
+<div class="ov" id="nameOv">
+  <div class="sheet">
+    <h3>Pick your handle</h3>
+    <p>This is how you'll show up on the server leaderboard. Use your Discord name so the crew knows who's who.</p>
+    <input type="text" id="nameInput" maxlength="20" placeholder="e.g. DegenDave" style="margin-bottom:16px;text-align:center">
+    <div class="row"><button class="primary" id="nameSave" style="flex:1">Save</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+</body>
+</html>
